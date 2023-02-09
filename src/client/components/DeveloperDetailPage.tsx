@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Anchor,
   Box,
   Card,
   Flex,
@@ -82,7 +83,26 @@ export const DeveloperDetailPage: React.FC<Props> = ({ developer, theme }) => {
                           size="30"
                           style={{ marginRight: "2px" }}
                         />
-                        <Text>{developer.likes}</Text>
+                        {developer.likes > 0 && (
+                          <Tooltip
+                            label="いいねしたユーザーを表示する"
+                            position="right"
+                          >
+                            <Anchor
+                              component={Link}
+                              href={`/themes/${developer.themeId}/developers/${developer.id}/liking-users`}
+                              sx={(theme) => ({
+                                color: developer.likedByLoggedInUser
+                                  ? theme.colors.pink[7]
+                                  : "inherit",
+                                textDecoration: "underline",
+                                "&:hover": { color: theme.colors.red[7] },
+                              })}
+                            >
+                              {developer.likes}
+                            </Anchor>
+                          </Tooltip>
+                        )}
                       </Flex>
                     </Tooltip>
                   </Box>

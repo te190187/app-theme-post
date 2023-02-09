@@ -279,6 +279,41 @@ export const themeRoute = router({
       return { users, allPages };
     }),
 
+  //指定された開発者をいいねしているユーザーを取得する
+  getDeveloperLikingUsers: publicProcedure
+    .input(z.object({ themeId: z.string(), page: pageSchema }))
+    .query(async ({ input }) => {
+      const { data: use, allPages } = await paginate({
+        finder: prisma.appThemeDeveloperLike.findMany,
+        finderInput: {
+          where: { developerId: input.themeId },
+          orderBy: { createdAt: "desc" as const },
+        },
+        counter: prisma.appThemeDeveloperLike.count,
+        pagingData: { page: input.page, limit: 20 },
+      });
+
+      const userIds = use.map(({ userId }) => userId);
+
+      //ユーザーの情報を取得する
+      const usered = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+      });
+
+      //userIdsに並び順を合わせる
+      const sortusers = usered.sort((a, b) => {
+        return userIds.indexOf(a.id) - userIds.indexOf(b.id);
+      });
+
+      //usersにceratedAt(いいねをした日)をつける
+      const users = sortusers.map((user, i) => ({
+        ...user,
+        developerLikeCreated: new Date(use[i]?.createdAt) ?? 0,
+      }));
+
+      return { users, allPages };
+    }),
+
   // 1カ月間でいいねが多かった投稿を取得する
   getTop10LikesThemesInThisMonth: publicProcedure.query(async () => {
     const themes = await prisma.$transaction(async (tx) => {
