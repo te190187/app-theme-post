@@ -44,19 +44,21 @@ model Session {
 }
 
 model User {
-  id               String                  @id @default(cuid())
-  name             String?
-  email            String?                 @unique
-  emailVerified    DateTime?
-  image            String?
-  profile          String?                 @db.Text
-  accounts         Account[]
-  sessions         Session[]
-  appThemes        AppTheme[]
-  developers       AppThemeDeveloper[]
-  appThemeLikes    AppThemeLike[]
-  developerLikes   AppThemeDeveloperLike[]
-  appThemeComments AppThemeComment[]
+  id                    String                  @id @default(cuid())
+  name                  String?
+  email                 String?                 @unique
+  emailVerified         DateTime?
+  image                 String?
+  profile               String?                 @db.Text
+  accounts              Account[]
+  sessions              Session[]
+  appThemes             AppTheme[]
+  developers            AppThemeDeveloper[]
+  appThemeLikes         AppThemeLike[]
+  developerLikes        AppThemeDeveloperLike[]
+  appThemeComments      AppThemeComment[]
+  themeOwnerRanking     ThemeOwnerRanking?
+  themeDeveloperRanking ThemeDeveloperRanking?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -79,11 +81,16 @@ model AppTheme {
   // とりあえずお題も削除されるようにする
   user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  developers AppThemeDeveloper[]
+  recommendedTheme RecommendedTheme?
 
-  likes AppThemeLike[]
+  manyDevelopersTheme ManyDevelopersTheme?
+  developers          AppThemeDeveloper[]
 
-  comments AppThemeComment[]
+  manyLikesTheme ManyLikesTheme?
+  likes          AppThemeLike[]
+
+  manyCommentsTheme ManyCommentsTheme?
+  comments          AppThemeComment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -156,11 +163,11 @@ model AppThemeDeveloperLike {
   @@index([userId])
 }
 
-model FavoriteUser{
-  userId              String
-  favoritedUserId     String
+model FavoriteUser {
+  userId          String
+  favoritedUserId String
 
-  @@id([userId,favoritedUserId])
+  @@id([userId, favoritedUserId])
 }
 
 model AppThemeComment {
@@ -174,7 +181,7 @@ model AppThemeComment {
 
   asParent AppThemeCommentParentChild[] @relation("asParent")
   // 親は一つなので、あるコメントが返信となるParentChildは一つ
-  asChild  AppThemeCommentParentChild? @relation("asChild")
+  asChild  AppThemeCommentParentChild?  @relation("asChild")
 
   createdAt DateTime @default(now())
 
@@ -188,7 +195,7 @@ model AppThemeCommentParentChild {
   parentComment   AppThemeComment? @relation("asParent", fields: [parentCommentId], references: [id], onDelete: SetNull)
 
   // 一つのコメントは最大で一つの返信元を持つので、childCommentIdを主キーにできる？
-  childCommentId String @id @default(cuid())
+  childCommentId String          @id @default(cuid())
   // 返信コメントが削除れたときに返信元コメントから見えなくしても問題ないため、行を削除する 
   childComment   AppThemeComment @relation("asChild", fields: [childCommentId], references: [id], onDelete: Cascade)
 
@@ -196,4 +203,64 @@ model AppThemeCommentParentChild {
 
   @@index([parentCommentId])
   @@index([childCommentId])
+}
+
+/////////////////////////////////////////////////////////////////////////
+// 集計用のテーブル 
+// バッチ処置でこのテーブルに書き込みを行い、アプリ側では参照だけする
+
+// 今の段階では期間は保存せずに、集計のたびにテーブルをリセットし直す。
+
+// おすすめのお題
+// 今の段階では、おすすめのお題は1ヶ月の間に良いねが多かったお題になる
+model RecommendedTheme {
+  themeId String   @id
+  theme   AppTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@index([themeId])
+}
+
+// いいねが多かったお題
+model ManyLikesTheme {
+  themeId String   @id
+  theme   AppTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  likes   Int
+
+  @@index([themeId])
+}
+
+// 開発者が多かったお題
+model ManyDevelopersTheme {
+  themeId    String   @id
+  theme      AppTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  developers Int
+
+  @@index([themeId])
+}
+
+// コメントが多かったお題
+model ManyCommentsTheme {
+  themeId  String   @id
+  theme    AppTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  comments Int
+
+  @@index([themeId])
+}
+
+// 投稿者ランキング
+model ThemeOwnerRanking {
+  userId String @id
+  User   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes  Int
+
+  @@index([userId])
+}
+
+// 開発者ランキング
+model ThemeDeveloperRanking {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes  Int
+
+  @@index([userId])
 }

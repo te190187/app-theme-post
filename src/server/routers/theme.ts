@@ -87,6 +87,40 @@ export const themeRoute = router({
   pickUp: publicProcedure
     .input(z.object({ order: themeOrderSchema }))
     .query(async ({ input }) => {
+      if (input.order === "likeDesc") {
+        const rawThemes = await prisma.manyLikesTheme.findMany({
+          orderBy: { likes: "desc" },
+          take: 6,
+        });
+        const themeIds = rawThemes.map((t) => t.themeId);
+
+        const themes = await findManyThemes({
+          where: { id: { in: themeIds } },
+        });
+
+        const sortedThemes = themes.sort((a, b) => {
+          return themeIds.indexOf(a.id) - themeIds.indexOf(b.id);
+        });
+
+        return sortedThemes;
+      } else if (input.order === "developerDesc") {
+        const rawThemes = await prisma.manyDevelopersTheme.findMany({
+          orderBy: { developers: "desc" },
+          take: 6,
+        });
+        const themeIds = rawThemes.map((t) => t.themeId);
+
+        const themes = await findManyThemes({
+          where: { id: { in: themeIds } },
+        });
+
+        const sortedThemes = themes.sort((a, b) => {
+          return themeIds.indexOf(a.id) - themeIds.indexOf(b.id);
+        });
+
+        return sortedThemes;
+      }
+
       const pickedUpThemes = await pickUpThemes(input.order, 6);
       return pickedUpThemes;
     }),
@@ -287,29 +321,11 @@ export const themeRoute = router({
     }),
 
   // 1カ月間でいいねが多かった投稿を取得する
+  // TODO: おすすめの投稿に名前を変える
   getTop10LikesThemesInThisMonth: publicProcedure.query(async () => {
     const themes = await prisma.$transaction(async (tx) => {
       // お題のidのリストを取得する
-      type ThemeIdObjs = { themeId: string }[];
-      const themeIdObjs = await tx.$queryRaw<ThemeIdObjs>`
-        SELECT
-          Theme.id as themeId
-          , COUNT(ThemeLike.id) as likeCount
-          , MIN(Theme.createdAt) as firstPostDatetime
-        FROM
-          AppThemeLike as ThemeLike
-          LEFT JOIN AppTheme as Theme
-            ON (ThemeLike.appThemeId = Theme.id)
-        WHERE
-          Theme.createdAt > (NOW() - INTERVAL 1 MONTh)
-        GROUP BY
-          Theme.id
-        ORDER BY
-          likeCount DESC
-          , firstPostDatetime ASC
-        LIMIT
-          10
-      `;
+      const themeIdObjs = await tx.recommendedTheme.findMany();
       const themeIds = themeIdObjs.map(({ themeId }) => themeId);
 
       const themes = await findManyThemes(
@@ -317,12 +333,7 @@ export const themeRoute = router({
         tx
       );
 
-      // themeIdsに並び順を合わせる
-      const sortedThemes = themes.sort((a, b) => {
-        return themeIds.indexOf(a.id) - themeIds.indexOf(b.id);
-      });
-
-      return sortedThemes;
+      return themes;
     });
 
     return themes;
@@ -333,28 +344,10 @@ export const themeRoute = router({
     const developerUsers: UserAndDeveloperLikes[] = await prisma.$transaction(
       async (tx) => {
         // ユーザーidのリストを取得する
-        type RawDeveloperUser = { userId: string; likeCount: BigInt }[];
-        const rawDeveloperUser = await tx.$queryRaw<RawDeveloperUser>`
-        SELECT
-          User.id as userId
-          , COUNT(DevLike.id) as likeCount
-          , MIN(Developer.createdAt) as firstDevelopDatetime
-        FROM
-          AppThemeDeveloperLike as DevLike
-          LEFT JOIN AppThemeDeveloper as Developer
-            ON (DevLike.developerId = Developer.id)
-          LEFT JOIN User
-            ON (Developer.userId = User.id)
-        WHERE
-          DevLike.createdAt > (NOW() - INTERVAL 1 MONTH)
-        GROUP BY
-          User.id
-        ORDER BY
-          likeCount DESC
-          , firstDevelopDatetime ASC
-        LIMIT
-          10
-      `;
+        const rawDeveloperUser = await tx.themeDeveloperRanking.findMany({
+          orderBy: { likes: "desc" },
+          take: 10,
+        });
         const developerUserIds = rawDeveloperUser.map(({ userId }) => userId);
 
         // ユーザーを取得する
@@ -374,7 +367,7 @@ export const themeRoute = router({
         const usersAndDeveloperLikes = sortedUsers.map(
           (user, i): UserAndDeveloperLikes => ({
             ...user,
-            developerLikes: Number(rawDeveloperUser[i]?.likeCount) ?? 0,
+            developerLikes: Number(rawDeveloperUser[i]?.likes) ?? 0,
           })
         );
 
@@ -389,29 +382,10 @@ export const themeRoute = router({
   getTop10LikesPostersInThisMonth: publicProcedure.query(async () => {
     const posterUsers: UserAndThemeLikes[] = await prisma.$transaction(
       async (tx) => {
-        type RawPosterUser = { userId: string; likeCount: BigInt }[];
-        // このクエリが原因?
-        const rawPosterUser = await tx.$queryRaw<RawPosterUser>`
-          SELECT
-            User.id as userId
-            , COUNT(ThemeLike.id) as likeCount
-            , MIN(Theme.createdAt) as firstPostDatetime
-          FROM
-            AppThemeLike as ThemeLike
-            LEFT JOIN AppTheme as Theme
-              ON (ThemeLike.appThemeId = Theme.id)
-            LEFT JOIN User
-              ON (Theme.userId = User.id)
-          WHERE
-            ThemeLike.createdAt > (NOW() - INTERVAL 1 MONTH)
-          GROUP BY
-            User.id
-          ORDER BY
-            likeCount DESC
-            , firstPostDatetime ASC
-          LIMIT
-            10
-        `;
+        const rawPosterUser = await tx.themeOwnerRanking.findMany({
+          orderBy: { likes: "desc" },
+          take: 10,
+        });
 
         const posterUserIds = rawPosterUser.map(({ userId }) => userId);
 
@@ -429,7 +403,7 @@ export const themeRoute = router({
         const usersAndThemeLikes = sortedUsers.map(
           (user, i): UserAndThemeLikes => ({
             ...user,
-            themeLikes: Number(rawPosterUser[i]?.likeCount) ?? 0,
+            themeLikes: Number(rawPosterUser[i]?.likes) ?? 0,
           })
         );
 
